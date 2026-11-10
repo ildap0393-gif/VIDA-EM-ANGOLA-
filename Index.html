@@ -1,0 +1,124 @@
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VIDA EM ANGOLA</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#101722;color:white;font-family:Arial,sans-serif}
+header{background:#172536;padding:18px;display:flex;justify-content:space-between;color:#f3c65e;font-weight:bold}
+main{padding:14px;max-width:800px;margin:auto}
+.card{background:#202d3d;border-radius:15px;padding:16px;margin:14px 0}
+h2{color:#f3c65e}
+.city{height:260px;background:linear-gradient(#8ebbd2 0 43%,#b5a17a 43% 48%,#667d55 48%);position:relative;overflow:hidden;border-radius:12px}
+.building{position:absolute;bottom:65px;width:100px;height:120px;background:#d6b995;border:3px solid #92785e}
+.b1{left:8%}.b2{right:8%;height:155px}
+.road{position:absolute;bottom:0;height:65px;background:#343a42;width:100%;border-top:4px solid #e3d3a9}
+.road:after{content:"";position:absolute;top:29px;width:100%;border-top:3px dashed white}
+#person{position:absolute;bottom:65px;left:45%;font-size:35px}
+.controls{display:grid;grid-template-columns:repeat(3,55px);gap:6px;justify-content:center;margin:15px}
+button{background:#344c63;color:white;border:1px solid #61758b;border-radius:9px;padding:12px;cursor:pointer}
+.apps{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.apps button{min-height:75px}
+.apps span{display:block;font-size:24px;margin-bottom:5px}
+.notice{background:#344c63;padding:12px;border-radius:10px;margin-top:12px;line-height:1.5}
+.choice{background:#9b7427;margin:5px}
+</style>
+</head>
+<body>
+<header>
+<span>VIDA EM ANGOLA</span>
+<span id="clock">--:--</span>
+</header>
+<main>
+<section class="card">
+<h2>Bem-vinda à tua nova vida!</h2>
+<p>📍 Talatona, Luanda, Angola</p>
+<p id="date"></p>
+<div class="city">
+<div class="building b1"></div>
+<div class="building b2"></div>
+<div class="road"></div>
+<div id="person">🧍🏾</div>
+</div>
+<div class="controls">
+<div></div><button onclick="move(0,-12)">⬆️</button><div></div>
+<button onclick="move(-12,0)">⬅️</button>
+<button onclick="move(0,12)">⬇️</button>
+<button onclick="move(12,0)">➡️</button>
+</div>
+<p style="text-align:center">Movimenta a personagem pela cidade.</p>
+</section>
+
+<section class="card">
+<h2>📱 ANGOLA PHONE</h2>
+<div class="apps">
+<button onclick="app('Mensagens')"><span>💬</span>Mensagens</button>
+<button onclick="app('Banco')"><span>🏦</span>Banco</button>
+<button onclick="app('Notícias')"><span>📰</span>Notícias</button>
+<button onclick="app('Empregos')"><span>💼</span>Empregos</button>
+<button onclick="app('GPS')"><span>📍</span>GPS</button>
+<button onclick="app('Compras')"><span>🛍️</span>Compras</button>
+</div>
+<div class="notice" id="phone">Escolhe uma aplicação do teu telemóvel.</div>
+</section>
+
+<section class="card">
+<h2>🚕 Acontecimento na cidade</h2>
+<p>Um táxi está parado na estrada. Ouves alguém a pedir ajuda.</p>
+<button class="choice" onclick="eventResult('Aproximaste-te com cuidado para perceber o que está a acontecer.')">Observar</button>
+<button class="choice" onclick="eventResult('Decidiste continuar o caminho. Mais tarde poderás saber o que aconteceu.')">Continuar caminho</button>
+<div class="notice" id="event">Qual será a tua decisão?</div>
+</section>
+
+<section class="card">
+<h2>🌤️ Estado do ambiente</h2>
+<p id="weather">Luanda — informação meteorológica não disponível nesta versão demonstrativa.</p>
+<p>O teu mundo, as tuas escolhas, a tua história.</p>
+</section>
+</main>
+<footer style="text-align:center;padding:20px;color:#aaa">
+VIDA EM ANGOLA · Protótipo 0.1
+</footer>
+<script>
+let x=45,y=0;
+function move(a,b){
+x=Math.max(2,Math.min(85,x+a));
+y=Math.max(-15,Math.min(15,y+b));
+document.getElementById('person').style.left=x+'%';
+document.getElementById('person').style.transform='translateY('+y+'px)';
+}
+function app(name){
+let info={
+'Mensagens':'💬 Amigo: Bom dia! Já estás a caminho da escola?',
+'Banco':'🏦 Saldo fictício: 85.000 Kz. Último movimento: 2.500 Kz.',
+'Notícias':'📰 Notícias de Luanda: trânsito condicionado em Talatona.',
+'Empregos':'💼 Nova oportunidade: assistente de loja em Luanda.',
+'GPS':'📍 Localização simulada: Talatona, Luanda.',
+'Compras':'🛍️ Bem-vinda ao mercado virtual!'
+};
+document.getElementById('phone').textContent=info[name];
+}
+function eventResult(t){
+document.getElementById('event').textContent=t;
+}
+function updateTime(){
+let d=new Date();
+document.getElementById('clock').textContent=
+d.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'});
+document.getElementById('date').textContent=
+d.toLocaleDateString('pt-PT',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+updateTime();
+setInterval(updateTime,1000);
+document.addEventListener('keydown',e=>{
+if(e.key==='ArrowUp')move(0,-5);
+if(e.key==='ArrowDown')move(0,5);
+if(e.key==='ArrowLeft')move(-5,0);
+if(e.key==='ArrowRight')move(5,0);
+});
+</script>
+</body>
+</html>
