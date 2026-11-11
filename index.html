@@ -1,0 +1,355 @@
+
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#14253d">
+<title>VIDA EM ANGOLA — Talatona 2.0</title>
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#17283c;color:white;font-family:system-ui,Arial;touch-action:none}
+#game{display:block;width:100vw;height:100dvh}
+.hud{position:fixed;inset:0;padding:12px;display:flex;flex-direction:column;justify-content:space-between;pointer-events:none}
+.top,.bottom{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.brand,.clock,.hint{background:#14253ddd;border:1px solid #ffffff35;border-radius:12px;padding:9px 12px;box-shadow:0 4px 12px #0004}
+.brand{font-weight:900;color:#f0b85b;letter-spacing:1px}
+.brand small{display:block;color:#d7e0e9;font-size:10px;font-weight:400}
+.clock{font-size:12px}
+.bottom{align-items:end}
+.hint{font-size:12px;max-width:48%}
+.controls{display:grid;grid-template-columns:repeat(3,45px);grid-template-rows:repeat(2,43px);gap:5px;pointer-events:auto}
+button{border:1px solid #ffffff55;background:#14253ddd;color:white;border-radius:12px;font-size:19px;font-weight:bold;touch-action:none}
+.controls button:active,.action:active{background:#f0a14a;color:#172637}
+.up{grid-column:2}.left{grid-column:1;grid-row:2}.down{grid-column:2;grid-row:2}.right{grid-column:3;grid-row:2}
+.action{pointer-events:auto;width:72px;height:72px;border-radius:50%;background:#c67832;font-size:12px}
+.toast{position:fixed;top:25%;left:50%;transform:translateX(-50%);background:#14253ddd;padding:12px;border-radius:12px;display:none;text-align:center;z-index:3}
+.toast.show{display:block}
+.modal{position:fixed;inset:0;background:#07111dcc;display:none;place-items:center;padding:20px;z-index:4}
+.modal.show{display:grid}
+.card{background:#fff8e9;color:#172637;padding:22px;border-radius:18px;width:100%;max-width:380px}
+.card h2{color:#173c60}
+.card button{padding:10px 18px;background:#173c60;font-size:15px}
+@media(min-width:800px){.hud{padding:20px}}
+</style>
+</head>
+<body>
+
+<canvas id="game"></canvas>
+
+<div class="hud">
+ <div class="top">
+  <div class="brand">VIDA EM ANGOLA<small>Talatona · Mundo aberto 2.0</small></div>
+  <div class="clock" id="clock">Luanda --:--</div>
+ </div>
+ <div class="bottom">
+  <div class="hint" id="hint">Explora Talatona. Aproxima-te de um edifício para interagir.</div>
+  <div class="controls">
+   <button class="up" data-dir="up">▲</button>
+   <button class="left" data-dir="left">◀</button>
+   <button class="down" data-dir="down">▼</button>
+   <button class="right" data-dir="right">▶</button>
+  </div>
+  <button class="action" id="interact">INTERAGIR</button>
+ </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="modal" id="modal">
+ <div class="card">
+  <h2 id="modalTitle">Local</h2>
+  <p id="modalText"></p>
+  <button id="close">Continuar</button>
+ </div>
+</div>
+
+<script>
+(()=>{
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d');
+
+const world={w:1500,h:1150};
+let W,H,dpr,scale,cam={x:0,y:0};
+
+const player={x:730,y:550,speed:205,dir:0};
+let visited=new Set();
+let keys={};
+let touch={up:false,down:false,left:false,right:false};
+let toastTimer=0;
+
+const buildings=[
+ {id:'residencial',name:'Residencial Horizonte',type:'Apartamentos',x:105,y:115,w:260,h:165,c:'#e8c58c',roof:'#a85e45'},
+ {id:'cantina',name:'Cantina da Banda',type:'Restaurante',x:465,y:125,w:170,h:120,c:'#ffe0aa',roof:'#d65b3d'},
+ {id:'super',name:'Supermercado Talatona',type:'Supermercado',x:1000,y:110,w:260,h:165,c:'#b7d9c2',roof:'#438466'},
+ {id:'house1',name:'Moradia Familiar',type:'Moradia',x:110,y:730,w:180,h:130,c:'#e5d0a5',roof:'#a95c4b'},
+ {id:'salon',name:'Espaço Beleza',type:'Salão',x:450,y:740,w:175,h:120,c:'#f1c0ce',roof:'#a34f75'},
+ {id:'school',name:'Escola Comunitária',type:'Escola',x:1000,y:740,w:250,h:150,c:'#f1d58c',roof:'#927047'},
+ {id:'restaurant',name:'Sabores de Luanda',type:'Restaurante',x:1120,y:410,w:190,h:135,c:'#f3c59c',roof:'#b76c3d'},
+ {id:'clothes',name:'Estilo da Banda',type:'Loja de roupa',x:170,y:410,w:190,h:135,c:'#e4b5d4',roof:'#844c7d'},
+ {id:'gym',name:'Ginásio Energia',type:'Ginásio',x:480,y:400,w:190,h:130,c:'#b7d9c2',roof:'#4d8a69'},
+ {id:'apart2',name:'Residencial Baobá',type:'Apartamentos',x:720,y:740,w:200,h:150,c:'#d8e0df',roof:'#547a88'}
+];
+
+const trees=[
+ [50,80],[400,100],[850,90],[1370,100],
+ [65,320],[410,330],[850,340],[1370,320],
+ [65,650],[400,650],[850,650],[1370,650],
+ [60,960],[400,1000],[850,1000],[1370,970],
+ [710,220],[710,880],[950,550],[300,550]
+];
+
+const roads=[
+ {x:0,y:335,w:1500,h:85},
+ {x:0,y:625,w:1500,h:85},
+ {x:680,y:0,w:100,h:1150},
+ {x:0,y:0,w:1500,h:55},
+ {x:0,y:1090,w:1500,h:60}
+];
+
+const cars=[
+ {x:180,y:374,c:'#f5f0e4'},
+ {x:530,y:374,c:'#287aab'},
+ {x:930,y:374,c:'#e2bd45'},
+ {x:1180,y:664,c:'#f5f0e4'},
+ {x:350,y:664,c:'#287aab'},
+ {x:830,y:664,c:'#d44b3c'}
+];
+
+function resize(){
+ dpr=Math.min(devicePixelRatio||1,2);
+ W=innerWidth;H=innerHeight;
+ canvas.width=W*dpr;canvas.height=H*dpr;
+ canvas.style.width=W+'px';canvas.style.height=H+'px';
+ scale=Math.min(W/850,H/620);
+ if(W<600)scale=Math.min(W/650,H/650);
+}
+addEventListener('resize',resize);resize();
+
+addEventListener('keydown',e=>{
+ keys[e.key.toLowerCase()]=true;
+ if(e.key.startsWith('Arrow'))e.preventDefault();
+});
+addEventListener('keyup',e=>keys[e.key.toLowerCase()]=false);
+
+document.querySelectorAll('[data-dir]').forEach(b=>{
+ const d=b.dataset.dir;
+ b.addEventListener('pointerdown',e=>{
+  e.preventDefault();touch[d]=true;
+  b.setPointerCapture(e.pointerId);
+ });
+ const stop=e=>{e.preventDefault();touch[d]=false};
+ b.addEventListener('pointerup',stop);
+ b.addEventListener('pointercancel',stop);
+ b.addEventListener('lostpointercapture',stop);
+});
+
+function nearest(){
+ let best=null,dist=Infinity;
+ for(const b of buildings){
+  const d=Math.hypot(player.x-(b.x+b.w/2),player.y-(b.y+b.h/2));
+  if(d<dist){dist=d;best=b}
+ }
+ return dist<125?best:null;
+}
+
+function notify(t){
+ const el=document.getElementById('toast');
+ el.textContent=t;el.classList.add('show');toastTimer=2;
+}
+
+function interact(){
+ const b=nearest();
+ if(!b){notify('Aproxima-te de um edifício.');return}
+ visited.add(b.id);
+ document.getElementById('modalTitle').textContent=b.name;
+ document.getElementById('modalText').textContent=
+ 'Estás em '+b.name+', em Talatona. Este local fará parte da cidade explorável de VIDA EM ANGOLA.';
+ document.getElementById('modal').classList.add('show');
+}
+
+document.getElementById('interact').addEventListener('pointerdown',e=>{
+ e.preventDefault();interact();
+});
+document.getElementById('close').onclick=()=>{
+ document.getElementById('modal').classList.remove('show');
+};
+document.getElementById('modal').onclick=e=>{
+ if(e.target.id==='modal')e.currentTarget.classList.remove('show');
+};
+
+function blocked(x,y){
+ for(const b of buildings){
+  if(x>b.x-17&&x<b.x+b.w+17&&y>b.y-17&&y<b.y+b.h+17)return true;
+ }
+ for(const [tx,ty] of trees){
+  if(Math.hypot(x-tx,y-ty)<20)return true;
+ }
+ return false;
+}
+
+function update(dt){
+ let dx=(keys['arrowright']||keys.d||touch.right?1:0)-
+        (keys['arrowleft']||keys.a||touch.left?1:0);
+ let dy=(keys['arrowdown']||keys.s||touch.down?1:0)-
+        (keys['arrowup']||keys.w||touch.up?1:0);
+
+ if(dx||dy){
+  const l=Math.hypot(dx,dy);dx/=l;dy/=l;
+  player.dir=Math.atan2(dy,dx);
+  const nx=Math.max(18,Math.min(world.w-18,player.x+dx*player.speed*dt));
+  const ny=Math.max(18,Math.min(world.h-18,player.y+dy*player.speed*dt));
+  if(!blocked(nx,player.y))player.x=nx;
+  if(!blocked(player.x,ny))player.y=ny;
+ }
+
+ cam.x=Math.max(0,Math.min(world.w-W/scale,player.x-W/(2*scale)));
+ cam.y=Math.max(0,Math.min(world.h-H/scale,player.y-H/(2*scale)));
+
+ const b=nearest();
+ document.getElementById('hint').textContent=
+ b?'Perto de '+b.name+'. Toca INTERAGIR.':
+ 'Explora Talatona. Aproxima-te dos edifícios para interagir.';
+
+ if(toastTimer>0){
+  toastTimer-=dt;
+  if(toastTimer<=0)document.getElementById('toast').classList.remove('show');
+ }
+}
+
+function rect(x,y,w,h,color){
+ ctx.fillStyle=color;ctx.fillRect(x,y,w,h);
+}
+
+function tree(x,y){
+ ctx.fillStyle='#74543a';ctx.fillRect(x-4,y+5,8,19);
+ ctx.fillStyle='#276844';
+ ctx.beginPath();ctx.arc(x,y,19,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#50955b';
+ ctx.beginPath();ctx.arc(x-7,y-6,11,0,Math.PI*2);ctx.fill();
+}
+
+function building(b){
+ ctx.fillStyle='#0003';ctx.fillRect(b.x+8,b.y+12,b.w,b.h);
+ ctx.fillStyle=b.c;ctx.fillRect(b.x,b.y,b.w,b.h);
+ ctx.strokeStyle='#765d49';ctx.lineWidth=3;
+ ctx.strokeRect(b.x,b.y,b.w,b.h);
+ rect(b.x,b.y,b.w,29,b.roof);
+ ctx.fillStyle='white';ctx.font='bold 13px system-ui';
+ ctx.textAlign='center';ctx.fillText(b.name,b.x+b.w/2,b.y+19);
+ for(let x=b.x+18;x<b.x+b.w-12;x+=37){
+  for(let y=b.y+44;y<b.y+b.h-22;y+=35){
+   rect(x,y,17,19,'#668594');
+   ctx.strokeStyle='#fff';ctx.lineWidth=1;
+   ctx.strokeRect(x,y,17,19);
+  }
+ }
+ rect(b.x+b.w/2-11,b.y+b.h-33,22,33,'#654832');
+ if(visited.has(b.id)){
+  ctx.fillStyle='#287451';ctx.beginPath();
+  ctx.arc(b.x+b.w-12,b.y+40,9,0,Math.PI*2);ctx.fill();
+ }
+}
+
+function car(x,y,c){
+ ctx.fillStyle='#0004';ctx.fillRect(x-19,y-10,43,24);
+ ctx.fillStyle=c;ctx.fillRect(x-21,y-13,43,23);
+ ctx.fillStyle='#a9d1df';ctx.fillRect(x-12,y-10,23,9);
+ ctx.fillStyle='#202c38';
+ ctx.fillRect(x-15,y+7,8,7);ctx.fillRect(x+8,y+7,8,7);
+}
+
+function draw(){
+ ctx.setTransform(dpr,0,0,dpr,0,0);
+ rect(0,0,W,H,'#a9c990');
+ ctx.save();ctx.scale(scale,scale);ctx.translate(-cam.x,-cam.y);
+
+ rect(0,0,world.w,world.h,'#b4cf99');
+
+ // Relva e pequenos jardins
+ for(let y=30;y<world.h;y+=90){
+  for(let x=30;x<world.w;x+=115){
+   ctx.fillStyle='#a5c58c';
+   ctx.beginPath();ctx.ellipse(x,y,20,8,0,0,Math.PI*2);ctx.fill();
+  }
+ }
+
+ // Estradas
+ for(const r of roads){
+  rect(r.x,r.y,r.w,r.h,'#777d7d');
+  ctx.fillStyle='#e9dca0';
+  if(r.h>r.w){
+   for(let y=r.y+10;y<r.y+r.h;y+=40)rect(r.x+r.w/2-2,y,4,20,'#e9dca0');
+  }else{
+   for(let x=r.x+10;x<r.x+r.w;x+=40)rect(x,r.y+r.h/2-2,20,4,'#e9dca0');
+  }
+  rect(r.x,r.y,r.w,7,'#c5c2ad');
+  rect(r.x,r.y+r.h-7,r.w,7,'#c5c2ad');
+ }
+
+ // Passadeiras
+ for(const x of [300,640,1000,1300]){
+  for(let i=0;i<6;i++){
+   rect(x+i*10,336,6,25,'#f4f0dc');
+   rect(x+i*10,625,6,25,'#f4f0dc');
+  }
+ }
+
+ // Caminhos e praça
+ rect(790,440,260,12,'#d5c49a');
+ rect(790,440,12,170,'#d5c49a');
+ rect(900,450,130,130,'#8eaf76');
+ rect(935,475,60,60,'#d4c59b');
+ ctx.fillStyle='#fff';ctx.font='bold 14px system-ui';
+ ctx.textAlign='center';
+ ctx.fillText('PRAÇA DE TALATONA',965,570);
+
+ trees.forEach(t=>tree(...t));
+ buildings.forEach(building);
+ cars.forEach(c=>car(c.x,c.y,c.c));
+
+ // Nome do bairro
+ ctx.fillStyle='#315a45';ctx.fillRect(555,520,150,30);
+ ctx.fillStyle='white';ctx.font='bold 14px system-ui';
+ ctx.fillText('TALATONA',630,540);
+
+ // Personagem
+ ctx.fillStyle='#26334155';
+ ctx.beginPath();ctx.ellipse(player.x,player.y+16,16,7,0,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#234c79';
+ ctx.beginPath();ctx.arc(player.x,player.y,15,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#eab78e';
+ ctx.beginPath();ctx.arc(player.x,player.y-3,8,0,Math.PI*2);ctx.fill();
+ ctx.fillStyle='#f19b3d';ctx.fillRect(player.x-12,player.y+5,24,10);
+ ctx.strokeStyle='white';ctx.lineWidth=2;
+ ctx.beginPath();
+ ctx.moveTo(player.x,player.y);
+ ctx.lineTo(player.x+Math.cos(player.dir)*20,player.y+Math.sin(player.dir)*20);
+ ctx.stroke();
+
+ const b=nearest();
+ if(b){
+  ctx.strokeStyle='#ffbd58';ctx.lineWidth=3;
+  ctx.setLineDash([7,5]);ctx.strokeRect(b.x-8,b.y-8,b.w+16,b.h+16);
+  ctx.setLineDash([]);
+ }
+ ctx.restore();
+}
+
+let last=performance.now();
+function frame(now){
+ const dt=Math.min((now-last)/1000,.04);last=now;
+ update(dt);draw();requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function clock(){
+ document.getElementById('clock').textContent=
+ 'Luanda · '+new Intl.DateTimeFormat('pt-AO',{
+ timeZone:'Africa/Luanda',hour:'2-digit',minute:'2-digit'
+ }).format(new Date());
+}
+clock();setInterval(clock,30000);
+})();
+</script>
+</body>
+</html>
